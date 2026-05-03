@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FRC</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <style>
+    textarea { resize: vertical; min-height: 300px; }
+    .message-content { white-space: pre-wrap; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto p-4">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-5xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+        FRC
+      </h1>
+      <a href="https://discord.gg/ReP5uD2fEd" target="_blank"
+         class="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-2xl font-medium">
+        <i class="fab fa-discord"></i>
+        <span>Join Discord</span>
+      </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Sidebar -->
+      <div class="lg:col-span-3 bg-gray-900 rounded-3xl p-6">
+        <h2 class="text-2xl font-bold mb-6">Categories</h2>
+        
+        <div onclick="filterCategory('all')" class="category-item flex items-center gap-3 p-4 rounded-2xl hover:bg-gray-800 cursor-pointer mb-2 active">
+          <i class="fas fa-inbox"></i> All
+        </div>
+        <div onclick="filterCategory('scripts')" class="category-item flex items-center gap-3 p-4 rounded-2xl hover:bg-gray-800 cursor-pointer mb-2">
+          <i class="fas fa-file-code"></i> Scripts
+        </div>
+        <div onclick="filterCategory('working')" class="category-item flex items-center gap-3 p-4 rounded-2xl hover:bg-gray-800 cursor-pointer mb-2">
+          <i class="fas fa-tools"></i> Working On Together
+        </div>
+        <div onclick="filterCategory('messages')" class="category-item flex items-center gap-3 p-4 rounded-2xl hover:bg-gray-800 cursor-pointer">
+          <i class="fas fa-envelope"></i> Messages
+        </div>
+
+        <div class="mt-10 pt-6 border-t border-gray-700">
+          <button onclick="newMessage()" 
+                  class="w-full bg-purple-600 hover:bg-purple-700 py-4 rounded-2xl font-medium flex items-center justify-center gap-2">
+            <i class="fas fa-plus"></i> New Message
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Area -->
+      <div class="lg:col-span-9">
+        <!-- Quick Send -->
+        <div class="bg-gray-900 rounded-3xl p-6 mb-6">
+          <h3 class="font-semibold mb-3">Quick Huge Message</h3>
+          <textarea id="quickMessage" class="w-full bg-gray-800 border border-gray-700 rounded-2xl p-5" placeholder="Type anything... no limit"></textarea>
+          <div class="flex gap-3 mt-4">
+            <button onclick="sendQuickMessage()" class="flex-1 bg-green-600 hover:bg-green-700 py-4 rounded-2xl font-medium">
+              Copy to Clipboard
+            </button>
+            <button onclick="saveQuickMessage()" class="flex-1 bg-purple-600 hover:bg-purple-700 py-4 rounded-2xl font-medium">
+              Save to Category
+            </button>
+          </div>
+        </div>
+
+        <!-- Saved Messages -->
+        <div class="bg-gray-900 rounded-3xl p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-2xl font-semibold" id="categoryTitle">All Messages</h3>
+            <div class="flex gap-3">
+              <button onclick="exportData()" class="px-5 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm">Export</button>
+              <button onclick="importData()" class="px-5 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm">Import</button>
+            </div>
+          </div>
+
+          <div id="messagesList" class="space-y-4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View/Edit Modal -->
+  <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="bg-gray-900 rounded-3xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+      <div class="p-6 border-b border-gray-700 flex justify-between items-center">
+        <input id="modalTitle" class="bg-transparent text-2xl font-bold outline-none w-full" placeholder="Message Title">
+        <select id="modalCategory" class="bg-gray-800 border border-gray-700 rounded-2xl px-5 py-2">
+          <option value="messages">Messages</option>
+          <option value="scripts">Scripts</option>
+          <option value="working">Working On Together</option>
+        </select>
+      </div>
+      
+      <textarea id="modalContent" class="flex-1 p-6 bg-gray-950 outline-none text-gray-100 message-content"></textarea>
+      
+      <div class="p-6 border-t border-gray-700 flex gap-3">
+        <button onclick="closeModal()" class="flex-1 py-4 rounded-2xl border border-gray-700 hover:bg-gray-800">Close</button>
+        <button onclick="copyCurrentMessage()" class="flex-1 py-4 rounded-2xl bg-cyan-600 hover:bg-cyan-700">Copy Message</button>
+        <button onclick="saveModal()" class="flex-1 py-4 rounded-2xl bg-purple-600 hover:bg-purple-700">Save</button>
+        <button onclick="deleteCurrent()" class="px-6 py-4 rounded-2xl text-red-400 hover:bg-gray-800">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div id="importModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="bg-gray-900 rounded-3xl w-full max-w-lg mx-4 p-6">
+      <h3 class="text-xl font-bold mb-4">Import Data</h3>
+      <textarea id="importText" rows="10" class="w-full bg-gray-800 border border-gray-700 rounded-2xl p-4 text-sm" placeholder="Paste exported JSON here..."></textarea>
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeImportModal()" class="flex-1 py-4 rounded-2xl border border-gray-700">Cancel</button>
+        <button onclick="confirmImport()" class="flex-1 py-4 rounded-2xl bg-purple-600">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let messages = JSON.parse(localStorage.getItem('frcMessages')) || [];
+    let currentFilter = 'all';
+    let currentEditId = null;
+
+    function saveToStorage() {
+      localStorage.setItem('frcMessages', JSON.stringify(messages));
+    }
+
+    function getCategoryColor(cat) {
+      if (cat === 'scripts') return 'bg-blue-900 text-blue-300';
+      if (cat === 'working') return 'bg-amber-900 text-amber-300';
+      return 'bg-purple-900 text-purple-300';
+    }
+
+    function renderMessages(filtered) {
+      const container = document.getElementById('messagesList');
+      container.innerHTML = '';
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<p class="text-gray-500 text-center py-20">No messages yet. Create one!</p>`;
+        return;
+      }
+
+      filtered.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = "bg-gray-800 rounded-2xl p-6 hover:bg-gray-700 transition-all group";
+        div.innerHTML = `
+          <div class="flex justify-between">
+            <div>
+              <h4 class="font-semibold text-lg">${msg.title}</h4>
+              <p class="text-xs text-gray-500">${new Date(msg.date).toLocaleDateString()}</p>
+            </div>
+            <span class="text-xs px-4 py-1.5 rounded-full ${getCategoryColor(msg.category)}">${msg.category}</span>
+          </div>
+          <p class="mt-4 text-gray-300 line-clamp-4 message-content">${msg.content}</p>
+          
+          <div class="flex gap-3 mt-6">
+            <button onclick="event.stopImmediatePropagation(); copyMessage('${msg.id}');" 
+                    class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm font-medium">
+              📋 Copy
+            </button>
+            <button onclick="event.stopImmediatePropagation(); openModal('${msg.id}');" 
+                    class="flex-1 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl text-sm font-medium">
+              Open
+            </button>
+          </div>
+        `;
+        div.onclick = () => openModal(msg.id);
+        container.appendChild(div);
+      });
+    }
+
+    function filterCategory(cat) {
+      currentFilter = cat;
+      document.querySelectorAll('.category-item').forEach(el => el.classList.remove('active', 'bg-gray-800'));
+      
+      const items = document.querySelectorAll('.category-item');
+      if (cat === 'all') items[0].classList.add('active', 'bg-gray-800');
+      else if (cat === 'scripts') items[1].classList.add('active', 'bg-gray-800');
+      else if (cat === 'working') items[2].classList.add('active', 'bg-gray-800');
+      else items[3].classList.add('active', 'bg-gray-800');
+
+      document.getElementById('categoryTitle').textContent = 
+        cat === 'all' ? 'All Messages' : 
+        cat === 'scripts' ? 'Scripts' : 
+        cat === 'working' ? 'Working On Together' : 'Messages';
+
+      loadMessages();
+    }
+
+    function loadMessages() {
+      let filtered = messages;
+      if (currentFilter !== 'all') {
+        filtered = messages.filter(m => m.category === currentFilter);
+      }
+      renderMessages(filtered);
+    }
+
+    function newMessage() {
+      currentEditId = null;
+      document.getElementById('modalTitle').value = '';
+      document.getElementById('modalContent').value = '';
+      document.getElementById('modalCategory').value = 'messages';
+      document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function openModal(id) {
+      const msg = messages.find(m => m.id === id);
+      if (!msg) return;
+      currentEditId = id;
+      document.getElementById('modalTitle').value = msg.title;
+      document.getElementById('modalContent').value = msg.content;
+      document.getElementById('modalCategory').value = msg.category;
+      document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modal').classList.add('hidden');
+    }
+
+    function saveModal() {
+      const title = document.getElementById('modalTitle').value.trim() || 'Untitled';
+      const content = document.getElementById('modalContent').value;
+      const category = document.getElementById('modalCategory').value;
+
+      if (currentEditId) {
+        const msg = messages.find(m => m.id === currentEditId);
+        if (msg) {
+          msg.title = title;
+          msg.content = content;
+          msg.category = category;
+          msg.date = new Date().toISOString();
+        }
+      } else {
+        messages.unshift({
+          id: Date.now(),
+          title,
+          content,
+          category,
+          date: new Date().toISOString()
+        });
+      }
+
+      saveToStorage();
+      closeModal();
+      loadMessages();
+    }
+
+    function deleteCurrent() {
+      if (!currentEditId || !confirm('Delete this message?')) return;
+      messages = messages.filter(m => m.id !== currentEditId);
+      saveToStorage();
+      closeModal();
+      loadMessages();
+    }
+
+    function copyMessage(id) {
+      const msg = messages.find(m => m.id === parseInt(id));
+      if (msg) {
+        navigator.clipboard.writeText(msg.content);
+        alert("✅ Copied to clipboard!");
+      }
+    }
+
+    function copyCurrentMessage() {
+      const content = document.getElementById('modalContent').value;
+      if (content) {
+        navigator.clipboard.writeText(content);
+        alert("✅ Message copied!");
+      }
+    }
+
+    function sendQuickMessage() {
+      const content = document.getElementById('quickMessage').value.trim();
+      if (!content) return alert("Nothing to copy!");
+      navigator.clipboard.writeText(content);
+      alert("✅ Copied to clipboard!");
+    }
+
+    function saveQuickMessage() {
+      const content = document.getElementById('quickMessage').value.trim();
+      if (!content) return;
+      
+      messages.unshift({
+        id: Date.now(),
+        title: "Quick Save " + new Date().toLocaleDateString(),
+        content,
+        category: "messages",
+        date: new Date().toISOString()
+      });
+      
+      saveToStorage();
+      loadMessages();
+      document.getElementById('quickMessage').value = '';
+      alert("Saved!");
+    }
+
+    // Export / Import
+    function exportData() {
+      const dataStr = JSON.stringify(messages, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `FRC-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+    }
+
+    function importData() {
+      document.getElementById('importModal').classList.remove('hidden');
+    }
+
+    function closeImportModal() {
+      document.getElementById('importModal').classList.add('hidden');
+    }
+
+    function confirmImport() {
+      try {
+        const imported = JSON.parse(document.getElementById('importText').value.trim());
+        if (Array.isArray(imported) && confirm(`Import ${imported.length} messages?`)) {
+          messages = imported;
+          saveToStorage();
+          loadMessages();
+          closeImportModal();
+          alert("✅ Import successful!");
+        }
+      } catch(e) {
+        alert("Invalid JSON format.");
+      }
+    }
+
+    // Init
+    filterCategory('all');
+  </script>
+</body>
+</html>
