@@ -123,15 +123,53 @@
     let currentFilter = 'all';
     let currentEditId = null;
 
-    function saveToStorage() {
+    // ─── Shared Utilities ───────────────────────────────────────────────
+
+    const CATEGORIES = {
+      all:      { label: 'All Messages',        icon: 'fa-inbox',     color: '' },
+      scripts:  { label: 'Scripts',             icon: 'fa-file-code', color: 'bg-blue-900 text-blue-300' },
+      working:  { label: 'Working On Together', icon: 'fa-tools',     color: 'bg-amber-900 text-amber-300' },
+      messages: { label: 'Messages',            icon: 'fa-envelope',  color: 'bg-purple-900 text-purple-300' }
+    };
+
+    function copyToClipboard(text, successMsg = 'Copied to clipboard!') {
+      if (!text) return alert("Nothing to copy!");
+      navigator.clipboard.writeText(text);
+      alert(successMsg);
+    }
+
+    function showModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function hideModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function findMessage(id) {
+      return messages.find(m => m.id === Number(id));
+    }
+
+    function createMessage(title, content, category) {
+      return {
+        id: Date.now(),
+        title,
+        content,
+        category,
+        date: new Date().toISOString()
+      };
+    }
+
+    function persistAndRefresh() {
       localStorage.setItem('frcMessages', JSON.stringify(messages));
+      loadMessages();
     }
 
     function getCategoryColor(cat) {
-      if (cat === 'scripts') return 'bg-blue-900 text-blue-300';
-      if (cat === 'working') return 'bg-amber-900 text-amber-300';
-      return 'bg-purple-900 text-purple-300';
+      return (CATEGORIES[cat] && CATEGORIES[cat].color) || CATEGORIES.messages.color;
     }
+
+    // ─── Rendering ──────────────────────────────────────────────────────
 
     function renderMessages(filtered) {
       const container = document.getElementById('messagesList');
@@ -158,7 +196,7 @@
           <div class="flex gap-3 mt-6">
             <button onclick="event.stopImmediatePropagation(); copyMessage('${msg.id}');" 
                     class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm font-medium">
-              📋 Copy
+              Copy
             </button>
             <button onclick="event.stopImmediatePropagation(); openModal('${msg.id}');" 
                     class="flex-1 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl text-sm font-medium">
@@ -171,21 +209,18 @@
       });
     }
 
+    // ─── Category Filtering ─────────────────────────────────────────────
+
     function filterCategory(cat) {
       currentFilter = cat;
-      document.querySelectorAll('.category-item').forEach(el => el.classList.remove('active', 'bg-gray-800'));
-      
       const items = document.querySelectorAll('.category-item');
-      if (cat === 'all') items[0].classList.add('active', 'bg-gray-800');
-      else if (cat === 'scripts') items[1].classList.add('active', 'bg-gray-800');
-      else if (cat === 'working') items[2].classList.add('active', 'bg-gray-800');
-      else items[3].classList.add('active', 'bg-gray-800');
+      items.forEach(el => el.classList.remove('active', 'bg-gray-800'));
 
-      document.getElementById('categoryTitle').textContent = 
-        cat === 'all' ? 'All Messages' : 
-        cat === 'scripts' ? 'Scripts' : 
-        cat === 'working' ? 'Working On Together' : 'Messages';
+      const keys = Object.keys(CATEGORIES);
+      const idx = keys.indexOf(cat);
+      if (idx >= 0) items[idx].classList.add('active', 'bg-gray-800');
 
+      document.getElementById('categoryTitle').textContent = CATEGORIES[cat].label;
       loadMessages();
     }
 
@@ -197,26 +232,28 @@
       renderMessages(filtered);
     }
 
+    // ─── Modal Actions ──────────────────────────────────────────────────
+
     function newMessage() {
       currentEditId = null;
       document.getElementById('modalTitle').value = '';
       document.getElementById('modalContent').value = '';
       document.getElementById('modalCategory').value = 'messages';
-      document.getElementById('modal').classList.remove('hidden');
+      showModal('modal');
     }
 
     function openModal(id) {
-      const msg = messages.find(m => m.id === id);
+      const msg = findMessage(id);
       if (!msg) return;
       currentEditId = id;
       document.getElementById('modalTitle').value = msg.title;
       document.getElementById('modalContent').value = msg.content;
       document.getElementById('modalCategory').value = msg.category;
-      document.getElementById('modal').classList.remove('hidden');
+      showModal('modal');
     }
 
     function closeModal() {
-      document.getElementById('modal').classList.add('hidden');
+      hideModal('modal');
     }
 
     function saveModal() {
@@ -225,7 +262,7 @@
       const category = document.getElementById('modalCategory').value;
 
       if (currentEditId) {
-        const msg = messages.find(m => m.id === currentEditId);
+        const msg = findMessage(currentEditId);
         if (msg) {
           msg.title = title;
           msg.content = content;
@@ -233,70 +270,54 @@
           msg.date = new Date().toISOString();
         }
       } else {
-        messages.unshift({
-          id: Date.now(),
-          title,
-          content,
-          category,
-          date: new Date().toISOString()
-        });
+        messages.unshift(createMessage(title, content, category));
       }
 
-      saveToStorage();
+      persistAndRefresh();
       closeModal();
-      loadMessages();
     }
 
     function deleteCurrent() {
       if (!currentEditId || !confirm('Delete this message?')) return;
       messages = messages.filter(m => m.id !== currentEditId);
-      saveToStorage();
+      persistAndRefresh();
       closeModal();
-      loadMessages();
     }
 
+    // ─── Clipboard Actions ──────────────────────────────────────────────
+
     function copyMessage(id) {
-      const msg = messages.find(m => m.id === parseInt(id));
-      if (msg) {
-        navigator.clipboard.writeText(msg.content);
-        alert("✅ Copied to clipboard!");
-      }
+      const msg = findMessage(id);
+      if (msg) copyToClipboard(msg.content);
     }
 
     function copyCurrentMessage() {
-      const content = document.getElementById('modalContent').value;
-      if (content) {
-        navigator.clipboard.writeText(content);
-        alert("✅ Message copied!");
-      }
+      copyToClipboard(document.getElementById('modalContent').value);
     }
 
     function sendQuickMessage() {
-      const content = document.getElementById('quickMessage').value.trim();
-      if (!content) return alert("Nothing to copy!");
-      navigator.clipboard.writeText(content);
-      alert("✅ Copied to clipboard!");
+      copyToClipboard(document.getElementById('quickMessage').value.trim());
     }
+
+    // ─── Quick Save ─────────────────────────────────────────────────────
 
     function saveQuickMessage() {
       const content = document.getElementById('quickMessage').value.trim();
       if (!content) return;
-      
-      messages.unshift({
-        id: Date.now(),
-        title: "Quick Save " + new Date().toLocaleDateString(),
+
+      messages.unshift(createMessage(
+        "Quick Save " + new Date().toLocaleDateString(),
         content,
-        category: "messages",
-        date: new Date().toISOString()
-      });
-      
-      saveToStorage();
-      loadMessages();
+        "messages"
+      ));
+
+      persistAndRefresh();
       document.getElementById('quickMessage').value = '';
       alert("Saved!");
     }
 
-    // Export / Import
+    // ─── Export / Import ────────────────────────────────────────────────
+
     function exportData() {
       const dataStr = JSON.stringify(messages, null, 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
@@ -307,11 +328,11 @@
     }
 
     function importData() {
-      document.getElementById('importModal').classList.remove('hidden');
+      showModal('importModal');
     }
 
     function closeImportModal() {
-      document.getElementById('importModal').classList.add('hidden');
+      hideModal('importModal');
     }
 
     function confirmImport() {
@@ -319,17 +340,16 @@
         const imported = JSON.parse(document.getElementById('importText').value.trim());
         if (Array.isArray(imported) && confirm(`Import ${imported.length} messages?`)) {
           messages = imported;
-          saveToStorage();
-          loadMessages();
+          persistAndRefresh();
           closeImportModal();
-          alert("✅ Import successful!");
+          alert("Import successful!");
         }
       } catch(e) {
         alert("Invalid JSON format.");
       }
     }
 
-    // Init
+    // ─── Init ───────────────────────────────────────────────────────────
     filterCategory('all');
   </script>
 </body>
