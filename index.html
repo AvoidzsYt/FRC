@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FRC</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" integrity="sha384-h/hnnw1Bi4nbpD6kE7nYfCXzovi622sY5WBxww8ARKwpdLj5kUWjRuyiXaD1U2JT" crossorigin="anonymous">
   <style>
     textarea { resize: vertical; min-height: 300px; }
     .message-content { white-space: pre-wrap; }
@@ -123,6 +123,16 @@
     let currentFilter = 'all';
     let currentEditId = null;
 
+    function escapeHtml(str) {
+      if (typeof str !== 'string') return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     function saveToStorage() {
       localStorage.setItem('frcMessages', JSON.stringify(messages));
     }
@@ -145,27 +155,36 @@
       filtered.forEach(msg => {
         const div = document.createElement('div');
         div.className = "bg-gray-800 rounded-2xl p-6 hover:bg-gray-700 transition-all group";
+        const safeId = escapeHtml(String(msg.id));
         div.innerHTML = `
           <div class="flex justify-between">
             <div>
-              <h4 class="font-semibold text-lg">${msg.title}</h4>
-              <p class="text-xs text-gray-500">${new Date(msg.date).toLocaleDateString()}</p>
+              <h4 class="font-semibold text-lg">${escapeHtml(msg.title)}</h4>
+              <p class="text-xs text-gray-500">${escapeHtml(new Date(msg.date).toLocaleDateString())}</p>
             </div>
-            <span class="text-xs px-4 py-1.5 rounded-full ${getCategoryColor(msg.category)}">${msg.category}</span>
+            <span class="text-xs px-4 py-1.5 rounded-full ${getCategoryColor(msg.category)}">${escapeHtml(msg.category)}</span>
           </div>
-          <p class="mt-4 text-gray-300 line-clamp-4 message-content">${msg.content}</p>
+          <p class="mt-4 text-gray-300 line-clamp-4 message-content">${escapeHtml(msg.content)}</p>
           
           <div class="flex gap-3 mt-6">
-            <button onclick="event.stopImmediatePropagation(); copyMessage('${msg.id}');" 
+            <button data-copy-id="${safeId}" 
                     class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm font-medium">
-              📋 Copy
+              Copy
             </button>
-            <button onclick="event.stopImmediatePropagation(); openModal('${msg.id}');" 
+            <button data-open-id="${safeId}" 
                     class="flex-1 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl text-sm font-medium">
               Open
             </button>
           </div>
         `;
+        div.querySelector('[data-copy-id]').addEventListener('click', function(e) {
+          e.stopImmediatePropagation();
+          copyMessage(msg.id);
+        });
+        div.querySelector('[data-open-id]').addEventListener('click', function(e) {
+          e.stopImmediatePropagation();
+          openModal(msg.id);
+        });
         div.onclick = () => openModal(msg.id);
         container.appendChild(div);
       });
@@ -256,10 +275,10 @@
     }
 
     function copyMessage(id) {
-      const msg = messages.find(m => m.id === parseInt(id));
+      const msg = messages.find(m => m.id === id);
       if (msg) {
         navigator.clipboard.writeText(msg.content);
-        alert("✅ Copied to clipboard!");
+        alert("Copied to clipboard!");
       }
     }
 
@@ -314,15 +333,38 @@
       document.getElementById('importModal').classList.add('hidden');
     }
 
+    function sanitizeMessage(obj) {
+      if (typeof obj !== 'object' || obj === null) return null;
+      const allowed = ['id', 'title', 'content', 'category', 'date'];
+      const validCategories = ['messages', 'scripts', 'working'];
+      const clean = {};
+      for (const key of allowed) {
+        if (!(key in obj)) return null;
+      }
+      clean.id = typeof obj.id === 'number' ? obj.id : Date.now();
+      clean.title = typeof obj.title === 'string' ? obj.title : '';
+      clean.content = typeof obj.content === 'string' ? obj.content : '';
+      clean.category = validCategories.includes(obj.category) ? obj.category : 'messages';
+      clean.date = typeof obj.date === 'string' ? obj.date : new Date().toISOString();
+      return clean;
+    }
+
     function confirmImport() {
       try {
         const imported = JSON.parse(document.getElementById('importText').value.trim());
-        if (Array.isArray(imported) && confirm(`Import ${imported.length} messages?`)) {
-          messages = imported;
+        if (!Array.isArray(imported)) {
+          return alert("Invalid format: expected an array.");
+        }
+        const sanitized = imported.map(sanitizeMessage).filter(Boolean);
+        if (sanitized.length === 0) {
+          return alert("No valid messages found in import data.");
+        }
+        if (confirm(`Import ${sanitized.length} messages?`)) {
+          messages = sanitized;
           saveToStorage();
           loadMessages();
           closeImportModal();
-          alert("✅ Import successful!");
+          alert("Import successful!");
         }
       } catch(e) {
         alert("Invalid JSON format.");
