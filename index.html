@@ -119,12 +119,41 @@
   </div>
 
   <script>
-    let messages = JSON.parse(localStorage.getItem('frcMessages')) || [];
+    let messages = [];
     let currentFilter = 'all';
     let currentEditId = null;
 
+    // Safely load messages from localStorage, handling corrupted data or unavailable storage
+    function loadFromStorage() {
+      try {
+        const raw = localStorage.getItem('frcMessages');
+        if (raw === null) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          console.error('Stored messages data is not an array, resetting.');
+          return [];
+        }
+        return parsed;
+      } catch (e) {
+        console.error('Failed to load messages from localStorage:', e);
+        alert('Warning: Could not load saved messages. Storage may be corrupted or unavailable.');
+        return [];
+      }
+    }
+
+    messages = loadFromStorage();
+
     function saveToStorage() {
-      localStorage.setItem('frcMessages', JSON.stringify(messages));
+      try {
+        localStorage.setItem('frcMessages', JSON.stringify(messages));
+      } catch (e) {
+        console.error('Failed to save messages to localStorage:', e);
+        if (e.name === 'QuotaExceededError') {
+          alert('Error: Storage is full. Please delete some messages or export and clear data.');
+        } else {
+          alert('Error: Could not save messages. Local storage may be unavailable.');
+        }
+      }
     }
 
     function getCategoryColor(cat) {
@@ -206,9 +235,13 @@
     }
 
     function openModal(id) {
-      const msg = messages.find(m => m.id === id);
-      if (!msg) return;
-      currentEditId = id;
+      const numId = Number(id);
+      const msg = messages.find(m => m.id === numId);
+      if (!msg) {
+        console.error('openModal: message not found for id:', id);
+        return;
+      }
+      currentEditId = numId;
       document.getElementById('modalTitle').value = msg.title;
       document.getElementById('modalContent').value = msg.content;
       document.getElementById('modalCategory').value = msg.category;
@@ -248,7 +281,11 @@
     }
 
     function deleteCurrent() {
-      if (!currentEditId || !confirm('Delete this message?')) return;
+      if (currentEditId === null) {
+        alert('Error: No message selected to delete.');
+        return;
+      }
+      if (!confirm('Delete this message?')) return;
       messages = messages.filter(m => m.id !== currentEditId);
       saveToStorage();
       closeModal();
@@ -256,26 +293,45 @@
     }
 
     function copyMessage(id) {
-      const msg = messages.find(m => m.id === parseInt(id));
-      if (msg) {
-        navigator.clipboard.writeText(msg.content);
-        alert("✅ Copied to clipboard!");
+      const msg = messages.find(m => m.id === Number(id));
+      if (!msg) {
+        console.error('copyMessage: message not found for id:', id);
+        return;
       }
+      navigator.clipboard.writeText(msg.content).then(function() {
+        alert("Copied to clipboard!");
+      }).catch(function(err) {
+        console.error('Clipboard write failed:', err);
+        alert('Failed to copy: clipboard access denied. Please copy manually.');
+      });
     }
 
     function copyCurrentMessage() {
       const content = document.getElementById('modalContent').value;
-      if (content) {
-        navigator.clipboard.writeText(content);
-        alert("✅ Message copied!");
+      if (!content) {
+        alert('Nothing to copy!');
+        return;
       }
+      navigator.clipboard.writeText(content).then(function() {
+        alert("Message copied!");
+      }).catch(function(err) {
+        console.error('Clipboard write failed:', err);
+        alert('Failed to copy: clipboard access denied. Please copy manually.');
+      });
     }
 
     function sendQuickMessage() {
       const content = document.getElementById('quickMessage').value.trim();
-      if (!content) return alert("Nothing to copy!");
-      navigator.clipboard.writeText(content);
-      alert("✅ Copied to clipboard!");
+      if (!content) {
+        alert('Nothing to copy!');
+        return;
+      }
+      navigator.clipboard.writeText(content).then(function() {
+        alert('Copied to clipboard!');
+      }).catch(function(err) {
+        console.error('Clipboard write failed:', err);
+        alert('Failed to copy: clipboard access denied. Please copy manually.');
+      });
     }
 
     function saveQuickMessage() {
@@ -298,12 +354,24 @@
 
     // Export / Import
     function exportData() {
-      const dataStr = JSON.stringify(messages, null, 2);
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `FRC-backup-${new Date().toISOString().slice(0,10)}.json`;
-      a.click();
+      if (messages.length === 0) {
+        alert('No messages to export.');
+        return;
+      }
+      try {
+        const dataStr = JSON.stringify(messages, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `FRC-backup-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        // Revoke the object URL after download to free memory
+        setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+      } catch (e) {
+        console.error('Export failed:', e);
+        alert('Error: Failed to export data. ' + e.message);
+      }
     }
 
     function importData() {
@@ -315,17 +383,37 @@
     }
 
     function confirmImport() {
+      const rawInput = document.getElementById('importText').value.trim();
+      if (!rawInput) {
+        alert('Error: No data to import. Please paste JSON data first.');
+        return;
+      }
+
+      let imported;
       try {
-        const imported = JSON.parse(document.getElementById('importText').value.trim());
-        if (Array.isArray(imported) && confirm(`Import ${imported.length} messages?`)) {
-          messages = imported;
-          saveToStorage();
-          loadMessages();
-          closeImportModal();
-          alert("✅ Import successful!");
-        }
-      } catch(e) {
-        alert("Invalid JSON format.");
+        imported = JSON.parse(rawInput);
+      } catch (e) {
+        console.error('Import JSON parse error:', e);
+        alert('Error: Invalid JSON format. Please check the data and try again.\n\nDetails: ' + e.message);
+        return;
+      }
+
+      if (!Array.isArray(imported)) {
+        alert('Error: Import data must be a JSON array of messages.');
+        return;
+      }
+
+      if (imported.length === 0) {
+        alert('Warning: The imported data contains no messages.');
+        return;
+      }
+
+      if (confirm(`Import ${imported.length} messages? This will replace all existing messages.`)) {
+        messages = imported;
+        saveToStorage();
+        loadMessages();
+        closeImportModal();
+        alert('Import successful! ' + imported.length + ' messages loaded.');
       }
     }
 
